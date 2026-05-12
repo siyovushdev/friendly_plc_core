@@ -122,6 +122,15 @@ void plc_port_reset_outputs(void)
     memset(s_ao_percent, 0, sizeof(s_ao_percent));
 }
 
+void plc_port_stop_pwm(void)
+{
+}
+
+void plc_port_set_safe_outputs(void)
+{
+    plc_port_reset_outputs();
+}
+
 #ifdef FRIENDLY_PLC_ENABLE_TEST_API
 
 bool plc_port_test_get_do(uint16_t ch)

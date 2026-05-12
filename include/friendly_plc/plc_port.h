@@ -31,6 +31,8 @@ uint32_t plc_port_now_ms(void);
 
 void plc_port_feed_watchdog(void);
 void plc_port_reset_outputs(void);
+void plc_port_stop_pwm(void);
+void plc_port_set_safe_outputs(void);
 
 #ifdef FRIENDLY_PLC_ENABLE_TEST_API
 bool plc_port_test_get_do(uint16_t ch);

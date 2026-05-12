@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "friendly_plc/plc_safety.h"
 
 typedef enum
 {
@@ -32,6 +33,8 @@ typedef struct
     uint32_t faultCounter;
 
 } PlcRuntimeState;
+
+PlcFaultCode plc_runtime_fault_to_fault_code(PlcRuntimeFault fault);
 
 extern PlcRuntimeState g_plcRuntime;
 

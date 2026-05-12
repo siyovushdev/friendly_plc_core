@@ -114,3 +114,30 @@
 #ifndef PLC_LOG_CMDS
 #define PLC_LOG_CMDS 1
 #endif
+// =========================================================
+// SAFETY / FAULT ESCALATION
+// =========================================================
+
+#ifndef PLC_SCAN_OVERRUN_SAFE_THRESHOLD
+#define PLC_SCAN_OVERRUN_SAFE_THRESHOLD 3u
+#endif
+
+#ifndef PLC_SCAN_OVERRUN_FAULT_THRESHOLD
+#define PLC_SCAN_OVERRUN_FAULT_THRESHOLD 10u
+#endif
+
+#ifndef PLC_SCAN_OVERRUN_BUDGET_PERCENT
+#define PLC_SCAN_OVERRUN_BUDGET_PERCENT 100u
+#endif
+
+#ifndef PLC_PROTOCOL_ERROR_SAFE_THRESHOLD
+#define PLC_PROTOCOL_ERROR_SAFE_THRESHOLD 5u
+#endif
+
+#ifndef PLC_PROTOCOL_ERROR_FAULT_THRESHOLD
+#define PLC_PROTOCOL_ERROR_FAULT_THRESHOLD 20u
+#endif
+
+#ifndef PLC_WATCHDOG_MISS_FAULT_THRESHOLD
+#define PLC_WATCHDOG_MISS_FAULT_THRESHOLD 2u
+#endif

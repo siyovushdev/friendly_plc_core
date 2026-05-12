@@ -8,6 +8,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 add_library(friendly_plc_core STATIC
         src/plc_log.c
         src/plc_event.c
+        src/plc_safety.c
         src/plc_memory.c
         ports/linux/plc_port_linux.c
         src/plc_validation.c
@@ -28,6 +29,7 @@ add_library(friendly_plc_core STATIC
         src/nodes/plc_node_basic.c
         src/nodes/plc_node_special_io.c
         src/nodes/plc_node_exec.c
+        src/plc_snapshot.c
 )
 
 target_include_directories(friendly_plc_core

@@ -6,6 +6,7 @@
 #include "friendly_plc/plc_error.h"
 #include "plc_internal.h"
 #include "friendly_plc/plc_runtime.h"
+#include "friendly_plc/plc_safety.h"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -87,6 +88,7 @@ bool plc_upload_graph(const PlcGraph *src) {
 
         g_stagingGraphValid = false;
         plc_event_push(PLC_EVENT_VALIDATE_ERROR, (int16_t)err, 0);
+        plc_enter_safe(PLC_FAULT_DOMAIN_VALIDATION, PLC_FAULT_INVALID_GRAPH, (int32_t)err);
         return false;
     }
 
@@ -230,12 +232,9 @@ static void plc_apply_pending_cmds(PlcGraph* g, uint32_t dt_ms);
 
 void plc_tick(uint32_t nowMs)
 {
-    if (plc_runtime_is_faulted()) {
-
-        plc_port_reset_outputs();
-
+    if (plc_is_safe_or_faulted()) {
+        plc_safety_apply_safe_outputs_once();
         plc_port_feed_watchdog();
-
         return;
     }
 
@@ -279,7 +278,9 @@ void plc_tick(uint32_t nowMs)
         plc_mem_reset_all();
 
         // СБРОС ВСЕХ ВЫХОДОВ
-        plc_port_reset_outputs();
+        plc_safety_apply_safe_outputs_always();
+        plc_ack_faults();
+        plc_request_run();
 
 
 
@@ -318,10 +319,36 @@ void plc_tick(uint32_t nowMs)
 
     // AI update is handled by platform layer if needed
 
+    if (!plc_is_running()) {
+        plc_safety_apply_safe_outputs_once();
+        plc_port_feed_watchdog();
+        return;
+    }
+
     // 4) цикл ПЛК
+    uint32_t execStartMs = plc_port_now_ms();
+
     plc_refresh_inputs_hw(nowMs, &g_activeGraph);
     plc_apply_pending_cmds(&g_activeGraph, dt);
     plc_graph_step(&g_activeGraph, dt);
+
+    uint32_t execElapsedMs = plc_port_now_ms() - execStartMs;
+    uint32_t budgetMs = (periodMs * PLC_SCAN_OVERRUN_BUDGET_PERCENT) / 100u;
+    if (budgetMs == 0u) {
+        budgetMs = 1u;
+    }
+
+    g_plcRuntime.cycleCounter++;
+    g_plcRuntime.lastCycleUs = execElapsedMs * 1000u;
+    if (g_plcRuntime.lastCycleUs > g_plcRuntime.maxCycleUs) {
+        g_plcRuntime.maxCycleUs = g_plcRuntime.lastCycleUs;
+    }
+
+    if (execElapsedMs > budgetMs || dt > (periodMs * 2u)) {
+        plc_fault_note_scan_overrun(execElapsedMs > budgetMs ? execElapsedMs : dt, budgetMs);
+    } else {
+        plc_fault_note_scan_ok();
+    }
 
     // 5) watchdog
     plc_port_feed_watchdog();
@@ -355,6 +382,8 @@ static void plc_apply_pending_cmds(PlcGraph *g, uint32_t dt_ms)
 
 void plc_runtime_init(void)
 {
+    plc_safety_init();
+
     g_plcRuntime.safeMode = false;
 
     g_plcRuntime.lastFault = PLC_RUNTIME_OK;
@@ -367,14 +396,36 @@ void plc_runtime_init(void)
     g_plcRuntime.faultCounter = 0;
 }
 
+static PlcFaultCode plc_runtime_fault_to_safety_fault(PlcRuntimeFault fault)
+{
+    switch (fault) {
+        case PLC_RUNTIME_OK: return PLC_FAULT_NONE;
+        case PLC_RUNTIME_FAULT_NULL_GRAPH: return PLC_FAULT_NULL_GRAPH;
+        case PLC_RUNTIME_FAULT_BAD_NODE_INDEX: return PLC_FAULT_BAD_NODE_INDEX;
+        case PLC_RUNTIME_FAULT_BAD_NODE_TYPE: return PLC_FAULT_BAD_NODE_TYPE;
+        case PLC_RUNTIME_FAULT_EXECUTION_TIMEOUT: return PLC_FAULT_EXECUTION_TIMEOUT;
+        case PLC_RUNTIME_FAULT_STACK_CORRUPTION: return PLC_FAULT_STACK_CORRUPTION;
+        case PLC_RUNTIME_FAULT_INVALID_INPUT: return PLC_FAULT_INVALID_INPUT;
+        case PLC_RUNTIME_FAULT_INVALID_OUTPUT: return PLC_FAULT_INVALID_OUTPUT;
+        case PLC_RUNTIME_FAULT_DIV_ZERO: return PLC_FAULT_DIV_ZERO;
+        default: return PLC_FAULT_BAD_NODE_TYPE;
+    }
+}
+
 void plc_runtime_enter_fault(
         PlcRuntimeFault fault)
 {
+    if (fault == PLC_RUNTIME_OK) {
+        return;
+    }
+
     g_plcRuntime.safeMode = true;
-
     g_plcRuntime.lastFault = fault;
-
     g_plcRuntime.faultCounter++;
+
+    plc_enter_fault(PLC_FAULT_DOMAIN_RUNTIME,
+                    plc_runtime_fault_to_safety_fault(fault),
+                    (int32_t)fault);
 }
 
 bool plc_runtime_is_faulted(void)
@@ -385,6 +436,10 @@ bool plc_runtime_is_faulted(void)
 void plc_runtime_reset_fault(void)
 {
     g_plcRuntime.safeMode = false;
-
     g_plcRuntime.lastFault = PLC_RUNTIME_OK;
+
+    (void)plc_ack_faults();
+    if (g_activeGraphValid) {
+        (void)plc_request_run();
+    }
 }

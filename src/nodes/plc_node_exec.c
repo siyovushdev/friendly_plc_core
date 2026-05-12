@@ -317,6 +317,16 @@ static void exec_pid(PlcGraph* g, PlcNode* self, const PlcNode* a, const PlcNode
     plc_node_exec_pid(self, a, b, dt_ms);
 }
 
+
+static void exec_input_noop(PlcGraph* g, PlcNode* self, const PlcNode* a, const PlcNode* b, uint32_t dt_ms)
+{
+    UNUSED(g);
+    UNUSED(self);
+    UNUSED(a);
+    UNUSED(b);
+    UNUSED(dt_ms);
+}
+
 /* ================= IO ================= */
 
 static void exec_do(PlcGraph* g, PlcNode* self, const PlcNode* a, const PlcNode* b, uint32_t dt_ms)
@@ -460,6 +470,8 @@ PlcNodeExecFn plc_node_get_exec_fn(PlcNodeType type)
 
         case PLC_NODE_PID:             return exec_pid;
 
+        case PLC_NODE_DIGITAL_IN:      return exec_input_noop;
+        case PLC_NODE_AI_IN:           return exec_input_noop;
         case PLC_NODE_DIGITAL_OUT:     return exec_do;
         case PLC_NODE_AO:              return exec_ao;
 

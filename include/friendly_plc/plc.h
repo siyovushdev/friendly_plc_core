@@ -2,6 +2,8 @@
 
 #include "friendly_plc/plc_types.h"
 #include "friendly_plc/plc_error.h"
+#include "friendly_plc/plc_safety.h"
+#include "friendly_plc/plc_memory.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,18 +27,6 @@ void plc_tick(uint32_t nowMs);
 
 void plc_graph_reset_runtime(PlcGraph* g);
 bool plc_validate_graph(PlcGraph* g);
-
-void plc_mem_set_bool(uint16_t index, bool value);
-bool plc_mem_get_bool(uint16_t index);
-
-void plc_mem_set_int(uint16_t index, int32_t value);
-int32_t plc_mem_get_int(uint16_t index);
-
-void plc_mem_set_real(uint16_t index, float value);
-float plc_mem_get_real(uint16_t index);
-
-void plc_mem_reset_all(void);
-void plc_mem_init(void);
 
 PlcError plc_validate_graph_ex(PlcGraph* g);
 PlcError plc_get_last_error(void);

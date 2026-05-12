@@ -2,6 +2,8 @@
 #include "friendly_plc/plc_port.h"
 #include "friendly_plc/plc_log.h"
 #include "friendly_plc/plc_config.h"
+#include "friendly_plc/plc_safety.h"
+#include "friendly_plc/plc_runtime.h"
 
 #include "plc_internal.h"
 
@@ -81,7 +83,7 @@ void plc_refresh_inputs_hw(uint32_t nowMs, PlcGraph *g) {
 #if PLC_LOG_ENABLED
                     PLC_LOGW(PLC_LOG_TAG, "DI node %u invalid channel=%d", (unsigned)i, ch);
 #endif
-                    // Поведение по умолчанию: считаем вход = 0
+                    plc_enter_safe(PLC_FAULT_DOMAIN_IO, PLC_FAULT_IO_CHANNEL_INVALID, ch);
                     n->out.b = false;
                     break;
                 }
@@ -165,6 +167,12 @@ void plc_graph_step(PlcGraph *g, uint32_t dt_ms)
 
         PlcNode *self = &g->nodes[i];
 
+        if ((self->inA >= (int16_t)g->nodeCount) ||
+            (self->inB >= (int16_t)g->nodeCount)) {
+            plc_runtime_enter_fault(PLC_RUNTIME_FAULT_BAD_NODE_INDEX);
+            return;
+        }
+
         const PlcNode *a =
                 (self->inA >= 0)
                 ? &g->nodes[self->inA]
@@ -180,6 +188,13 @@ void plc_graph_step(PlcGraph *g, uint32_t dt_ms)
 
         if (exec) {
             exec(g, self, a, b, dt_ms);
+        } else {
+            plc_runtime_enter_fault(PLC_RUNTIME_FAULT_BAD_NODE_TYPE);
+            return;
+        }
+
+        if (plc_is_safe_or_faulted()) {
+            return;
         }
     }
 }
