@@ -71,7 +71,7 @@ void plc_graph_reset_runtime(PlcGraph *g) {
 bool plc_upload_graph(const PlcGraph *src) {
 #if PLC_LOG_ENABLED && PLC_LOG_UPLOAD
     PLC_LOGT(PLC_LOG_TAG, "upload: requested (nodeCount=%u, cycleMs=%u)", (unsigned) src->nodeCount,
-         (unsigned) src->cycleMs);
+             (unsigned) src->cycleMs);
 #endif
 
     g_stagingGraph = *src;
@@ -94,7 +94,7 @@ bool plc_upload_graph(const PlcGraph *src) {
 
 #if PLC_LOG_ENABLED && PLC_LOG_UPLOAD
     PLC_LOGT(PLC_LOG_TAG, "upload: graph valid (nodes=%u, cycleMs=%u)", (unsigned) g_stagingGraph.nodeCount,
-         (unsigned) g_stagingGraph.cycleMs);
+             (unsigned) g_stagingGraph.cycleMs);
 #endif
 
     plc_graph_reset_runtime(&g_stagingGraph);
@@ -142,7 +142,7 @@ bool plc_release_output(uint16_t nodeIndex)
     if (nodeIndex >= g_activeGraph.nodeCount) {
 #if PLC_LOG_ENABLED && PLC_LOG_CMDS
         PLC_LOGT(PLC_LOG_TAG, "release_output: bad nodeIndex=%u (nodes=%u)",
-             (unsigned)nodeIndex, (unsigned)g_activeGraph.nodeCount);
+                 (unsigned)nodeIndex, (unsigned)g_activeGraph.nodeCount);
 #endif
         return false;
     }
@@ -154,7 +154,7 @@ bool plc_release_output(uint16_t nodeIndex)
         n->type != PLC_NODE_AO) {
 #if PLC_LOG_ENABLED && PLC_LOG_CMDS
         PLC_LOGT(PLC_LOG_TAG, "release_output: node[%u] type=%u not DO/AO",
-             (unsigned)nodeIndex, (unsigned)n->type);
+                 (unsigned)nodeIndex, (unsigned)n->type);
 #endif
         // можно вернуть true, чтобы на верхнем уровне не считалось ошибкой
         return true;
@@ -179,7 +179,7 @@ bool plc_force_output(uint16_t nodeIndex, bool value, uint32_t holdMs)
 {
 #if PLC_LOG_ENABLED && PLC_LOG_CMDS
     PLC_LOGT(PLC_LOG_TAG, "force_output: req node=%u val=%u holdMs=%u",
-         (unsigned)nodeIndex, (unsigned)value, (unsigned)holdMs);
+             (unsigned)nodeIndex, (unsigned)value, (unsigned)holdMs);
 #endif
 
 
@@ -194,7 +194,7 @@ bool plc_force_output(uint16_t nodeIndex, bool value, uint32_t holdMs)
         if (nodeIndex >= g_activeGraph.nodeCount) {
 #if PLC_LOG_ENABLED && PLC_LOG_CMDS
             PLC_LOGT(PLC_LOG_TAG, "force_output: bad nodeIndex=%u (nodeCount=%u)",
-                 (unsigned)nodeIndex, (unsigned)g_activeGraph.nodeCount);
+                     (unsigned)nodeIndex, (unsigned)g_activeGraph.nodeCount);
 #endif
             break;
         }
@@ -205,7 +205,7 @@ bool plc_force_output(uint16_t nodeIndex, bool value, uint32_t holdMs)
             n->type != PLC_NODE_AO) {
 #if PLC_LOG_ENABLED && PLC_LOG_CMDS
             PLC_LOGT(PLC_LOG_TAG, "force_output: node[%u] type=%u not DO/AO",
-                 (unsigned)nodeIndex, (unsigned)n->type);
+                     (unsigned)nodeIndex, (unsigned)n->type);
 #endif
             break;
         }
@@ -217,7 +217,7 @@ bool plc_force_output(uint16_t nodeIndex, bool value, uint32_t holdMs)
 
 #if PLC_LOG_ENABLED && PLC_LOG_CMDS
         PLC_LOGT(PLC_LOG_TAG, "force_output: node[%u] en=1 val=%u left=%u",
-             (unsigned)nodeIndex, (unsigned)n->force_bool, (unsigned)n->force_left_ms);
+                 (unsigned)nodeIndex, (unsigned)n->force_bool, (unsigned)n->force_left_ms);
 #endif
 
 
@@ -232,12 +232,6 @@ static void plc_apply_pending_cmds(PlcGraph* g, uint32_t dt_ms);
 
 void plc_tick(uint32_t nowMs)
 {
-    if (plc_is_safe_or_faulted()) {
-        plc_safety_apply_safe_outputs_once();
-        plc_port_feed_watchdog();
-        return;
-    }
-
     uint32_t periodMs = 10;
     if (g_activeGraphValid && g_activeGraph.cycleMs > 0) {
         periodMs = g_activeGraph.cycleMs;
@@ -262,32 +256,49 @@ void plc_tick(uint32_t nowMs)
     // plc_eval_graph(dt);
 
     // 1) активация нового графа
+    // 1) активация нового графа
     if (g_needSwapGraph && g_stagingGraphValid) {
 
+        // Сначала снять старый SAFE/FAULT/STOP
+        (void)plc_ack_faults();
 
+        // Заменить runtime-граф
         g_activeGraph = g_stagingGraph;
         g_activeGraphValid = true;
+        g_stagingGraphValid = false;
         g_needSwapGraph = false;
+
+        // Сбросить runtime-состояния
         plc_graph_reset_runtime(&g_activeGraph);
         plc_io_reset_runtime();
-
-        plc_event_push(PLC_EVENT_ACTIVATE_OK,
-                       (int16_t)g_activeGraph.nodeCount,
-                       (int16_t)g_activeGraph.cycleMs);
-
         plc_mem_reset_all();
 
-        // СБРОС ВСЕХ ВЫХОДОВ
+        // Безопасно сбросить физические выходы
         plc_safety_apply_safe_outputs_always();
-        plc_ack_faults();
-        plc_request_run();
 
+        // Запустить PLC
+        if (!plc_request_run()) {
+            plc_event_push(PLC_EVENT_ACTIVATE_FAIL, 2, 0);
+            return;
+        }
 
+        plc_event_push(
+                PLC_EVENT_ACTIVATE_OK,
+                (int16_t)g_activeGraph.nodeCount,
+                (int16_t)g_activeGraph.cycleMs
+        );
 
 #if PLC_LOG_ENABLED && PLC_LOG_ACTIVATE
-        PLC_LOGT(PLC_LOG_TAG, "activate: swapped (nodes=%u, cycleMs=%u)",
-             (unsigned) g_activeGraph.nodeCount, (unsigned) g_activeGraph.cycleMs);
+        PLC_LOGT(PLC_LOG_TAG, "activate: swapped and running (nodes=%u, cycleMs=%u)",
+                 (unsigned) g_activeGraph.nodeCount,
+                 (unsigned) g_activeGraph.cycleMs);
 #endif
+    }
+
+    if (plc_is_safe_or_faulted()) {
+        plc_safety_apply_safe_outputs_once();
+        plc_port_feed_watchdog();
+        return;
     }
 
     // 2) нет активного графа
