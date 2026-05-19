@@ -1,5 +1,7 @@
 #include "plc_node_math.h"
 
+#include "friendly_plc/plc_runtime.h"
+
 #include <stdint.h>
 
 static inline float get_float(const PlcNode* n)
@@ -71,15 +73,29 @@ void plc_node_exec_math_op(PlcNode* self, const PlcNode* a, const PlcNode* b)
         int32_t r = 0;
 
         switch (op) {
-            case 0: r = va + vb; break;
-            case 1: r = va - vb; break;
-            case 2: r = va * vb; break;
+            case 0:
+                r = va + vb;
+                break;
+
+            case 1:
+                r = va - vb;
+                break;
+
+            case 2:
+                r = va * vb;
+                break;
+
             case 3:
-                r = (vb == 0) ? self->out.i : (va / vb);
+                if (vb == 0) {
+                    plc_runtime_enter_fault(PLC_RUNTIME_FAULT_DIV_ZERO);
+                    return;
+                }
+                r = va / vb;
                 break;
+
             default:
-                r = 0;
-                break;
+                plc_runtime_enter_fault(PLC_RUNTIME_FAULT_BAD_NODE_TYPE);
+                return;
         }
 
         self->out.i = r;
@@ -91,15 +107,29 @@ void plc_node_exec_math_op(PlcNode* self, const PlcNode* a, const PlcNode* b)
     float r = 0.0f;
 
     switch (op) {
-        case 0: r = va + vb; break;
-        case 1: r = va - vb; break;
-        case 2: r = va * vb; break;
+        case 0:
+            r = va + vb;
+            break;
+
+        case 1:
+            r = va - vb;
+            break;
+
+        case 2:
+            r = va * vb;
+            break;
+
         case 3:
-            r = (vb == 0.0f) ? self->out.f : (va / vb);
+            if (vb == 0.0f) {
+                plc_runtime_enter_fault(PLC_RUNTIME_FAULT_DIV_ZERO);
+                return;
+            }
+            r = va / vb;
             break;
+
         default:
-            r = 0.0f;
-            break;
+            plc_runtime_enter_fault(PLC_RUNTIME_FAULT_BAD_NODE_TYPE);
+            return;
     }
 
     self->out.f = r;
